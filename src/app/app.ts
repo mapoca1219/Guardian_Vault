@@ -528,8 +528,8 @@ const LOAN_ABI = [
                 </button>
               } @else { <div></div> }
               <div class="space-x-4">
-                  <button class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Exportar CSV</button>
-                  <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Exportar PDF</button>
+                  <button (click)="exportTaxReport('csv')" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Exportar CSV</button>
+                  <button (click)="exportTaxReport('pdf')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Exportar PDF</button>
               </div>
           </div>
         </div>
@@ -673,9 +673,16 @@ export class App implements OnDestroy {
     { id: 2, name: 'Guardian 2', contact: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC', status: 'active', avatarUrl: 'https://placehold.co/40x40/green/white?text=G2' }
   ]);
 
-  internalTransactions = signal<Transaction[]>([]);
-  metaMaskConnected = signal(false);
-  externalTransactions = signal<Transaction[]>([]);
+  internalTransactions = signal<Transaction[]>([
+    { id: 'tx1', txId: '0xabc123', category: 'Ganancia de Capital', asset: 'ETH', amount: 0.5, usdValue: 1750, date: '2024-01-15', costBasis: 1000, gainLoss: 750, walletSource: 'Guardian Vault' },
+    { id: 'tx2', txId: '0xdef456', category: 'Staking', asset: 'ETH', amount: 0.1, usdValue: 350, date: '2024-01-20', walletSource: 'Guardian Vault' },
+    { id: 'tx3', txId: '0x789ghi', category: 'Pago', asset: 'PYUSD', amount: 50, usdValue: 50, date: '2024-01-25', walletSource: 'Guardian Vault' }
+  ]);
+  metaMaskConnected = signal(true);
+  externalTransactions = signal<Transaction[]>([
+    { id: 'ext1', txId: '0x111aaa', category: 'Ganancia de Capital', asset: 'BTC', amount: 0.01, usdValue: 500, date: '2024-01-10', costBasis: 300, gainLoss: 200, walletSource: 'MetaMask' },
+    { id: 'ext2', txId: '0x222bbb', category: 'Ingreso por Servicios', asset: 'USDC', amount: 1000, usdValue: 1000, date: '2024-01-18', walletSource: 'MetaMask' }
+  ]);
   
   qrAmount = signal(0);
   emergencyCreditLine = signal({ total: 200, available: 200 });
@@ -788,7 +795,11 @@ export class App implements OnDestroy {
   async loginAndStartRecovery() {
     const success = await this.connectWallet();
     if (success) {
-      await this.startRecovery();
+      this.currentView.set('DASHBOARD');
+      // Esperar un momento para que se cargue el dashboard
+      setTimeout(() => {
+        this.startRecovery();
+      }, 1000);
     }
   }
 
@@ -1173,6 +1184,49 @@ export class App implements OnDestroy {
         case 'Aporte de Liquidez': return { icon: '💧', iconBg: 'bg-purple-500/20', text: 'text-purple-400' };
         default: return { icon: '💸', iconBg: 'bg-gray-600/20', text: 'text-white' };
     }
+  }
+
+  exportTaxReport(format: 'csv' | 'pdf') {
+    const transactions = this.allTransactions();
+    
+    if (format === 'csv') {
+      const csvContent = this.generateCSV(transactions);
+      this.downloadFile(csvContent, 'reporte-fiscal-2024.csv', 'text/csv');
+      alert('✅ Reporte CSV descargado exitosamente!');
+    } else {
+      const pdfContent = this.generatePDFContent(transactions);
+      alert('✅ Reporte PDF generado! (En producción se descargaría el archivo)');
+    }
+  }
+
+  private generateCSV(transactions: Transaction[]): string {
+    const headers = ['Fecha', 'Wallet', 'Categoría', 'Activo', 'Cantidad', 'Valor USD', 'Ganancia/Pérdida', 'TxID'];
+    const rows = transactions.map(tx => [
+      tx.date,
+      tx.walletSource,
+      tx.category,
+      tx.asset,
+      tx.amount.toString(),
+      tx.usdValue.toString(),
+      (tx.gainLoss || 0).toString(),
+      tx.txId
+    ]);
+    
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
+  }
+
+  private generatePDFContent(transactions: Transaction[]): string {
+    return `Reporte Fiscal 2024\n\nTotal de transacciones: ${transactions.length}\nGanancias de capital: $${this.totalCapitalGain()}\nOtros ingresos: $${this.totalOtherIncome()}`;
+  }
+
+  private downloadFile(content: string, filename: string, contentType: string) {
+    const blob = new Blob([content], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
   }
 
   showError(message: string) {
